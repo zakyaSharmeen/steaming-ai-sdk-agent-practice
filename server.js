@@ -1,64 +1,165 @@
-///////////////////////////////////////////
+// case-1
+// without tool
 
-import dotenv from "dotenv";
+// import { streamText } from "ai";
+// import { createOpenAI } from "@ai-sdk/openai";
+// import dotenv from "dotenv";
+
+// dotenv.config({ quiet: true });
+
+// // OpenRouter client
+// const openrouter = createOpenAI({
+//   baseURL: "https://openrouter.ai/api/v1",
+//   apiKey: process.env.OPENROUTER_API_KEY,
+//   headers: {
+//     "HTTP-Referer": "http://localhost:3000",
+//     "X-Title": "Simple App",
+//   },
+// });
+
+// // Simple streaming
+// const { textStream } = await streamText({
+//   model: openrouter("anthropic/claude-opus-4.5"),
+
+//   prompt: "Write a detailed 2 paragraph story about self confident",
+// });
+
+// // Stream output
+// for await (const textPart of textStream) {
+//   process.stdout.write(textPart);
+// }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+// case-2
+// tool (mannual) - fake agent
+
+// import { streamText } from "ai";
+// import { createOpenAI } from "@ai-sdk/openai";
+// import dotenv from "dotenv";
+
+// dotenv.config({ quiet: true });
+
+// const openrouter = createOpenAI({
+//   baseURL: "https://openrouter.ai/api/v1",
+//   apiKey: process.env.OPENROUTER_API_KEY,
+//   headers: {
+//     "HTTP-Referer": "http://localhost:3000",
+//     "X-Title": "Simple App",
+//   },
+// });
+
+// // Manual "tool"
+// const thoughts = [
+//   "Small steps today lead to big results tomorrow.",
+//   "Stay calm—confidence improves performance.",
+//   "You're prepared more than you think.",
+//   "Focus on effort, not fear.",
+// ];
+
+// const randomThought = thoughts[Math.floor(Math.random() * thoughts.length)];
+
+// const { textStream } = await streamText({
+//   model: openrouter("anthropic/claude-opus-4.5"),
+//   prompt: `Use this motivational thought and expand on it: "${randomThought}"`,
+// });
+
+// for await (const textPart of textStream) {
+//   process.stdout.write(textPart);
+// }
+////////////////////////////////////////////////////////////
+// with tool-case3
+
 import { streamText, tool } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
+import dotenv from "dotenv";
+import z from "zod";
 
 dotenv.config({ quiet: true });
 
-// OpenRouter setup
+// ✅ OpenRouter client
 const openrouter = createOpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
-});
-
-// ✅ Tool is defined separately
-const getThoughtOfDay = tool({
-  description: "Returns a motivational thought of the day",
-  parameters: {}, // no input needed
-  execute: async () => {
-    const thoughts = [
-      "Small steps today lead to big results tomorrow.",
-      "Stay calm—confidence improves performance.",
-      "You’ve prepared more than you think.",
-      "Focus on effort, not fear.",
-    ];
-
-    return thoughts[Math.floor(Math.random() * thoughts.length)];
+  headers: {
+    "HTTP-Referer": "http://localhost:3000",
+    "X-Title": "Simple App",
   },
 });
 
-// System prompt
+// ✅ System Prompt (NO tool info)
 const systemPrompt = `
-You are a motivational assistant.
-
-You MUST use the getThoughtOfDay tool in every response.
-
-Do not answer without calling the tool first.
+You are a helpful and concise AI assistant.
+Give clear, short, and meaningful responses.
+Do not over-explain.
+Be direct and useful.
 `;
 
-// Agent
+// ✅ REAL TOOL
+const getThoughtOfDay = tool({
+  description: "Use this tool when user asks for a motivational thought",
+  parameters: z.object({}),
+  execute: async () => {
+    console.log("✅ TOOL EXECUTED");
+
+    console.log("✅ TOOL EXECUTED");
+
+    const thoughts = [
+      "Small steps today lead to big results tomorrow.",
+      "Stay calm—confidence improves performance.",
+      "You're prepared more than you think.",
+      "Focus on effort, not fear.",
+    ];
+
+    // return thoughts[Math.floor(Math.random() * thoughts.length)];
+    return {
+      thought: thoughts[Math.floor(Math.random() * thoughts.length)],
+    };
+  },
+});
+
+// 🤖 Agent function
 export const runAgent = async (input) => {
   try {
-    const result = await streamText({
-      model: openrouter("openai/gpt-4o-mini"),
+    const { fullStream } = await streamText({
+      model: openrouter("anthropic/claude-opus-4.5"),
+
       system: systemPrompt,
       prompt: input,
+
+      tools: {
+        getThoughtOfDay,
+      },
+
+      // 🔥 force tool usage
+      toolChoice: "required",
     });
 
-    for await (const chunk of result.textStream) {
-      process.stdout.write(chunk);
+    console.log("\n🤖 Agent:\n");
+
+    for await (const event of fullStream) {
+      if (event.type === "tool-call") {
+        console.log("\n🔧 TOOL CALLED:", event.toolName);
+      }
+
+      if (event.type === "tool-result") {
+        console.log("📦 TOOL RESULT:", event.result || event.output);
+      }
+
+      if (event.type === "text-delta") {
+        process.stdout.write(event.textDelta);
+      }
     }
   } catch (err) {
-    console.error("FULL ERROR:", err?.response?.data || err);
+    console.error("❌ ERROR:", err?.message || err);
+    console.error("DETAILS:", err?.response?.data);
   }
 };
 
-// Main
+// ▶️ Main function
 const main = async () => {
-  const query = "I have an exam tomorrow";
+  const query = "Give me today's motivational thought";
 
-  console.log("🤖 Agent:\n");
+  console.log("🚀 Running Agent...\n");
+
   await runAgent(query);
 };
 
