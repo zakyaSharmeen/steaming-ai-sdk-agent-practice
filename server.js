@@ -79,10 +79,10 @@ dotenv.config({ quiet: true });
 const openrouter = createOpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY,
-  headers: {
-    "HTTP-Referer": "http://localhost:3000",
-    "X-Title": "Simple App",
-  },
+  // headers: {
+  //   "HTTP-Referer": "http://localhost:3000",
+  //   "X-Title": "Simple App",
+  // },
 });
 
 // ✅ System Prompt (NO tool info)
@@ -122,11 +122,11 @@ export const runAgent = async (input) => {
     const { fullStream } = await streamText({
       model: openrouter("anthropic/claude-opus-4.5"),
 
-      system: systemPrompt,
+      system: systemPrompt, //instructuction
       prompt: input,
 
       tools: {
-        getThoughtOfDay,
+        getThoughtOfDay, //tool created
       },
 
       // 🔥 force tool usage
